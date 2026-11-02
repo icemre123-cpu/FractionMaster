@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FractionMaster: ระบบช่วยสอนคณิตศาสตร์</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Sarabun -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Sarabun', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #f8fafc; }
+
+        /* 3D Card Flip */
+        .perspective { perspective: 1000px; }
+        .flip-card-inner {
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        .flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+        .flip-card-front, .flip-card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 1rem;
+        }
+        .flip-card-back { transform: rotateY(180deg); }
+
+        /* Visual Fraction Grid */
+        .fraction-box {
+            display: grid;
+            width: 160px;
+            height: 160px;
+            border: 4px solid #333;
+            border-radius: 12px;
+            overflow: hidden;
+            background-color: white;
+            transition: all 0.5s ease;
+        }
+        .fraction-piece {
+            border: 1px solid rgba(0,0,0,0.1);
+            transition: background-color 0.5s ease;
+        }
+        .fraction-piece.filled-1 { background-color: #3b82f6; } 
+        .fraction-piece.filled-2 { background-color: #10b981; } 
+        
+        .fraction-piece.transformed {
+            border: 2px dashed #555;
+            animation: pulse-border 1.5s infinite;
+        }
+
+        @keyframes pulse-border {
+            0% { border-color: rgba(0,0,0,0.2); }
+            50% { border-color: rgba(50,50,50,0.8); }
+            100% { border-color: rgba(0,0,0,0.2); }
+        }
+
+        .bounce { animation: bounce 0.5s; }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        /* Quiz Styles */
+        .quiz-option {
+            transition: all 0.2s ease;
+        }
+        .quiz-option.selected {
+            border-color: #2563eb;
+            background-color: #eff6ff;
+        }
+        .quiz-option.correct {
+            border-color: #10b981;
+            background-color: #ecfdf5;
+            color: #065f46;
+        }
+        .quiz-option.incorrect {
+            border-color: #ef4444;
+            background-color: #fef2f2;
+            color: #991b1b;
+        }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col font-sans">
+
+    <!-- Header & Navigation -->
+    <header class="bg-white shadow-sm p-4 text-center sticky top-0 z-10">
+        <h1 class="text-2xl md:text-3xl font-bold text-slate-800 mb-2">
+            <i class="fa-solid fa-shapes text-blue-700"></i> FractionMaster
+        </h1>
+        <p class="text-slate-500 font-medium mb-4">Interactive Addition System : ระบบช่วยสอนการบวกเศษส่วน</p>
+        <div class="flex justify-center gap-2 md:gap-4 flex-wrap">
+            <button onclick="switchTab('home')" id="btn-home" class="px-4 py-2 bg-blue-800 text-white font-semibold rounded-lg shadow hover:bg-blue-700 transition-colors border-2 border-blue-800">
+                <i class="fa-solid fa-house"></i> หน้าหลัก
+            </button>
+            <button onclick="switchTab('sandbox')" id="btn-sandbox" class="px-4 py-2 bg-gray-100 text-gray-600 font-semibold rounded-lg shadow hover:bg-gray-200 transition-colors border-2 border-transparent">
+                <i class="fa-solid fa-chalkboard"></i> แบบจำลองสถานการณ์
+            </button>
+            <button onclick="switchTab('game')" id="btn-game" class="px-4 py-2 bg-gray-100 text-gray-600 font-semibold rounded-lg shadow hover:bg-gray-200 transition-colors border-2 border-transparent">
+                <i class="fa-solid fa-gamepad"></i> แบบฝึกหัดจับคู่
+            </button>
+            <button onclick="switchTab('quiz')" id="btn-quiz" class="px-4 py-2 bg-gray-100 text-gray-600 font-semibold rounded-lg shadow hover:bg-gray-200 transition-colors border-2 border-transparent">
+                <i class="fa-solid fa-list-check"></i> แบบทดสอบ
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow p-4 md:p-8 flex flex-col items-center">
+
+        <!-- ========================================== -->
+        <!-- PART 0: Home / Dashboard -->
+        <!-- ========================================== -->
+        <section id="tab-home" class="w-full max-w-5xl flex flex-col gap-8 mb-8">
+            <div class="bg-gradient-to-r from-blue-900 to-slate-800 text-white rounded-2xl p-8 md:p-12 shadow-lg text-center relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+                    <i class="fa-solid fa-square-root-variable text-9xl absolute -top-10 -left-10 transform -rotate-12"></i>
+                    <i class="fa-solid fa-chart-pie text-8xl absolute bottom-0 right-10 transform rotate-12"></i>
+                </div>
+                <h2 class="text-3xl md:text-4xl font-bold mb-4 relative z-10">ยินดีต้อนรับสู่ FractionMaster</h2>
+                <p class="text-lg md:text-xl opacity-90 relative z-10">นวัตกรรมการเรียนรู้เรื่อง "การบวกเศษส่วนที่ตัวส่วนไม่เท่ากัน" แบบปฏิสัมพันธ์</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Card 1: Sandbox -->
+                <div onclick="switchTab('sandbox')" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-md hover:shadow-xl hover:border-blue-300 transition-all cursor-pointer group flex flex-col items-center text-center">
+                    <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-3xl mb-4 group-hover:scale-110 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                        <i class="fa-solid fa-chalkboard"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-800 mb-2">1. แบบจำลองสถานการณ์</h3>
+                    <p class="text-slate-600 text-sm leading-relaxed">
+                        สังเกตการเปลี่ยนแปลงของพื้นที่เมื่อทำการ <strong>ปรับตัวส่วนให้เท่ากัน</strong> ผ่านภาพจำลองแบบรูปธรรม (Concrete-Pictorial)
+                    </p>
+                </div>
+
+                <!-- Card 2: Game -->
+                <div onclick="switchTab('game')" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-md hover:shadow-xl hover:border-emerald-300 transition-all cursor-pointer group flex flex-col items-center text-center">
+                    <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-3xl mb-4 group-hover:scale-110 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                        <i class="fa-solid fa-gamepad"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-800 mb-2">2. แบบฝึกหัดจับคู่</h3>
+                    <p class="text-slate-600 text-sm leading-relaxed">
+                        ฝึกฝนกระบวนการคิดโดยการจับคู่โจทย์เริ่มต้น กับโจทย์ที่ปรับตัวส่วนแล้ว และคำนวณหาผลลัพธ์
+                    </p>
+                </div>
+
+                <!-- Card 3: Quiz -->
+                <div onclick="switchTab('quiz')" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-md hover:shadow-xl hover:border-purple-300 transition-all cursor-pointer group flex flex-col items-center text-center">
+                    <div class="w-16 h-16 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-3xl mb-4 group-hover:scale-110 group-hover:bg-purple-600 group-hover:text-white transition-all">
+                        <i class="fa-solid fa-list-check"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-800 mb-2">3. แบบทดสอบวัดความเข้าใจ</h3>
+                    <p class="text-slate-600 text-sm leading-relaxed">
+                        ประเมินความรู้รวบยอด (Conceptual Understanding) และทักษะการคำนวณผ่านแบบทดสอบ 5 ข้อ
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- PART 1: Visual Fraction Sandbox -->
+        <!-- ========================================== -->
+        <section id="tab-sandbox" class="w-full max-w-4xl bg-white p-6 md:p-8 rounded-xl shadow-md border border-slate-200 relative hidden">
+            <h2 class="text-2xl font-bold text-center mb-4 text-slate-800 border-b pb-4">แบบจำลองการหาตัวส่วนร่วม</h2>
+            
+            <div class="bg-slate-50 p-4 rounded-lg mb-8 text-slate-700 border border-slate-200 text-sm leading-relaxed">
+                <strong><i class="fa-solid fa-circle-info text-blue-600"></i> คำอธิบายทางวิชาการ:</strong><br>
+                แบบจำลองนี้ประยุกต์ใช้แนวทาง <strong>CPA (Concrete-Pictorial-Abstract)</strong> เพื่อแก้ปัญหาความสับสนของผู้เรียนที่มักนำ "ตัวเศษบวกตัวเศษ และตัวส่วนบวกตัวส่วน" 
+                เมื่อผู้เรียนกดปุ่ม <em>'ปรับตัวส่วนให้เท่ากัน'</em> ระบบจะแสดงแอนิเมชันการ <strong>ซอยพื้นที่ให้เล็กลง</strong> เพื่อชี้ให้เห็นถึงหลักการอนุรักษ์ปริมาณ (ปริมาณเท่าเดิม แต่จำนวนชิ้นส่วนเพิ่มขึ้น) ซึ่งเป็นความหมายที่แท้จริงของการทำตัวส่วนให้เท่ากันก่อนนำมาบวกกัน
+            </div>
+
+            <!-- Input Area -->
+            <div class="flex flex-wrap justify-center items-center gap-4 md:gap-12 mb-8">
+                <div class="flex flex-col items-center">
+                    <div class="text-lg font-semibold mb-2 text-blue-700">เศษส่วนที่ 1</div>
+                    <div class="flex flex-col w-20 text-center text-xl font-bold shadow-sm">
+                        <input type="number" id="num1" value="1" min="1" max="9" class="text-center border border-slate-300 border-b-slate-400 p-2 bg-blue-50 rounded-t focus:outline-none focus:bg-blue-100 focus:border-blue-500">
+                        <input type="number" id="den1" value="2" min="1" max="9" class="text-center border border-t-0 border-slate-300 p-2 bg-blue-50 rounded-b focus:outline-none focus:bg-blue-100 focus:border-blue-500">
+                    </div>
+                </div>
+                <div class="text-3xl font-bold text-slate-400">+</div>
+                <div class="flex flex-col items-center">
+                    <div class="text-lg font-semibold mb-2 text-emerald-700">เศษส่วนที่ 2</div>
+                    <div class="flex flex-col w-20 text-center text-xl font-bold shadow-sm">
+                        <input type="number" id="num2" value="1" min="1" max="9" class="text-center border border-slate-300 border-b-slate-400 p-2 bg-emerald-50 rounded-t focus:outline-none focus:bg-emerald-100 focus:border-emerald-500">
+                        <input type="number" id="den2" value="3" min="1" max="9" class="text-center border border-t-0 border-slate-300 p-2 bg-emerald-50 rounded-b focus:outline-none focus:bg-emerald-100 focus:border-emerald-500">
+                    </div>
+                </div>
+                <button onclick="drawInitialFractions()" class="mt-4 md:mt-0 px-5 py-2.5 bg-slate-700 text-white font-semibold rounded-lg shadow hover:bg-slate-800 transition focus:ring-4 focus:ring-slate-200">
+                    <i class="fa-solid fa-rotate"></i> สร้างแบบจำลอง
+                </button>
+            </div>
+
+            <!-- Visual Area -->
+            <div class="flex flex-col md:flex-row justify-center items-center gap-8 mb-8">
+                <div class="flex flex-col items-center">
+                    <div id="visual1" class="fraction-box shadow-inner"></div>
+                    <div id="lbl-frac1" class="mt-4 text-xl font-bold text-blue-700">1/2</div>
+                </div>
+                <div class="text-3xl font-bold text-slate-300"><i class="fa-solid fa-plus"></i></div>
+                <div class="flex flex-col items-center">
+                    <div id="visual2" class="fraction-box shadow-inner"></div>
+                    <div id="lbl-frac2" class="mt-4 text-xl font-bold text-emerald-700">1/3</div>
+                </div>
+            </div>
+
+            <!-- Transform Action -->
+            <div class="text-center">
+                <button id="btn-transform" onclick="transformFractions()" class="px-6 py-3 bg-blue-700 text-white text-lg font-semibold rounded-lg shadow-lg hover:bg-blue-800 transition focus:ring-4 focus:ring-blue-300">
+                    <i class="fa-solid fa-table-cells"></i> ปรับตัวส่วนให้เท่ากัน
+                </button>
+                <div id="sandbox-feedback" class="mt-4 text-lg font-semibold text-slate-700 min-h-[40px] opacity-0 transition-opacity"></div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- PART 2: Matching Game -->
+        <!-- ========================================== -->
+        <section id="tab-game" class="w-full max-w-5xl hidden flex-col items-center">
+            
+            <div class="bg-white p-6 rounded-xl shadow-md w-full border border-slate-200 text-center mb-6">
+                <h2 class="text-2xl font-bold text-slate-800 border-b pb-4 mb-4">แบบฝึกหัดทบทวน: นักสืบจับคู่เศษส่วน</h2>
+                <div class="bg-slate-50 p-4 rounded-lg text-slate-700 text-sm leading-relaxed border border-slate-200 text-left md:text-center mx-auto max-w-3xl">
+                    <strong><i class="fa-solid fa-circle-info text-emerald-600"></i> วิธีการทำกิจกรรม:</strong><br>
+                    เพื่อเชื่อมโยงความเข้าใจจากการมองเห็น (Pictorial) สู่สัญลักษณ์ (Abstract) ให้ผู้เรียนค้นหาและจับคู่การ์ด 
+                    <strong>"โจทย์ตั้งต้น"</strong> กับ <strong>"โจทย์ที่ปรับตัวส่วนร่วมแล้ว"</strong> เมื่อจับคู่ได้อย่างถูกต้อง ระบบจะแสดงหน้าต่างให้ผู้เรียน <em>ฝึกคำนวณและหาผลลัพธ์สุดท้าย</em> เพื่อรับคะแนน
+                </div>
+                
+                <div class="flex flex-wrap justify-center items-center gap-4 mt-6 w-full max-w-2xl mx-auto p-3 rounded-lg">
+                    <div class="flex items-center gap-2">
+                        <span class="font-semibold text-slate-700"><i class="fa-solid fa-layer-group"></i> ระดับ:</span>
+                        <select id="difficulty" onchange="initGame()" class="bg-white border border-slate-300 rounded-md px-3 py-1.5 text-slate-700 outline-none focus:border-blue-500 font-medium cursor-pointer shadow-sm">
+                            <option value="easy">พื้นฐาน (4 คู่)</option>
+                            <option value="medium">ปานกลาง (7 คู่)</option>
+                            <option value="hard" selected>ท้าทาย (10 คู่)</option>
+                        </select>
+                    </div>
+                    <div class="text-lg font-semibold bg-white px-4 py-1.5 rounded-md border border-slate-300 shadow-sm text-slate-700">
+                        คะแนนสะสม: <span id="score" class="text-blue-600 font-bold">0</span> / <span id="total-score">10</span>
+                    </div>
+                    <button onclick="initGame()" class="px-4 py-1.5 bg-slate-700 text-white font-semibold rounded-md shadow hover:bg-slate-800 transition">
+                        <i class="fa-solid fa-rotate-right"></i> เริ่มกระดานใหม่
+                    </button>
+                </div>
+            </div>
+
+            <div id="game-board" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 md:gap-4 w-full">
+                <!-- Cards injected here -->
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- PART 3: Quiz -->
+        <!-- ========================================== -->
+        <section id="tab-quiz" class="w-full max-w-3xl hidden flex-col items-center">
+            <div class="bg-white p-6 md:p-8 rounded-xl shadow-md w-full border border-slate-200">
+                <h2 class="text-2xl font-bold text-slate-800 border-b pb-4 mb-6 text-center">แบบทดสอบวัดความเข้าใจ (5 ข้อ)</h2>
+                
+                <div id="quiz-container" class="space-y-8">
+                    <!-- Quiz questions will be generated here -->
+                </div>
+
+                <div class="mt-8 text-center border-t pt-6">
+                    <button id="btn-submit-quiz" onclick="submitQuiz()" class="px-8 py-3 bg-purple-700 text-white text-lg font-bold rounded-lg shadow-lg hover:bg-purple-800 transition focus:ring-4 focus:ring-purple-300">
+                        <i class="fa-solid fa-check-double"></i> ส่งคำตอบ
+                    </button>
+                    <div id="quiz-result" class="mt-6 text-2xl font-bold hidden p-4 rounded-lg"></div>
+                    <button id="btn-retry-quiz" onclick="initQuiz()" class="mt-4 px-6 py-2 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition hidden">
+                        <i class="fa-solid fa-rotate-right"></i> ทำแบบทดสอบอีกครั้ง
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal for Matching Game Answer -->
+    <div id="answer-modal" class="fixed inset-0 bg-slate-900 bg-opacity-60 hidden flex-justify-center items-center z-50 flex backdrop-blur-sm">
+        <div class="bg-white p-8 rounded-xl shadow-2xl max-w-md w-[90%] text-center transform scale-95 transition-transform" id="modal-content">
+            <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">
+                <i class="fa-solid fa-check"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-slate-800 mb-2">จับคู่ได้อย่างถูกต้อง!</h2>
+            <p class="text-slate-600 mb-6 text-sm">กรุณาคำนวณผลบวกของเศษส่วนที่ตัวส่วนเท่ากันแล้ว เพื่อรับคะแนน</p>
+            
+            <div class="bg-slate-50 p-5 rounded-lg mb-6 flex justify-center items-center gap-4 text-xl font-bold border border-slate-200 shadow-inner">
+                <div id="modal-problem" class="text-slate-800 text-2xl tracking-widest">3/6 + 2/6</div>
+                <div class="text-slate-500">=</div>
+                <div class="flex flex-col w-20 text-center shadow-sm">
+                    <input type="number" id="ans-num" class="text-center border border-slate-300 border-b-slate-400 p-2 bg-white rounded-t focus:outline-none focus:bg-blue-50 text-blue-700 text-xl" placeholder="?">
+                    <input type="number" id="ans-den" class="text-center border border-t-0 border-slate-300 p-2 bg-white rounded-b focus:outline-none focus:bg-blue-50 text-emerald-700 text-xl" placeholder="?">
+                </div>
+            </div>
+
+            <div id="modal-feedback" class="bg-red-50 text-red-600 text-sm font-semibold p-3 rounded mb-4 border border-red-200 hidden"></div>
+
+            <div class="flex justify-center gap-3">
+                <button onclick="closeModal(false)" class="px-5 py-2.5 bg-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-300 transition">ยกเลิก</button>
+                <button onclick="checkAnswer()" class="px-5 py-2.5 bg-blue-700 text-white font-semibold rounded-lg shadow hover:bg-blue-800 transition">ยืนยันคำตอบ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Alert -->
+    <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl font-bold transition-opacity duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-2">
+        <i class="fa-solid fa-circle-info"></i> <span id="toast-msg">Message</span>
+    </div>
+
+    <script>
+        // ==========================================
+        // UTILITY FUNCTIONS
+        // ==========================================
+        function showToast(message, isSuccess = true) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = message;
+            toast.style.backgroundColor = isSuccess ? '#047857' : '#be123c'; 
+            toast.style.opacity = '1';
+            setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+        }
+
+        function switchTab(tabId) {
+            const tabs = ['home', 'sandbox', 'game', 'quiz'];
+            const colors = {
+                'home': 'blue',
+                'sandbox': 'blue',
+                'game': 'emerald',
+                'quiz': 'purple'
+            };
+            
+            tabs.forEach(id => {
+                const panel = document.getElementById('tab-' + id);
+                const btn = document.getElementById('btn-' + id);
+                const c = colors[tabId] || 'blue'; // default active color
+                
+                if (id === tabId) {
+                    panel.classList.remove('hidden');
+                    if (id === 'home' || id === 'game' || id === 'quiz') panel.classList.add('flex');
+                    // Active Button
+                    btn.className = `px-4 py-2 bg-${c}-800 text-white font-semibold rounded-lg shadow hover:bg-${c}-700 transition-colors border-2 border-${c}-800`;
+                } else {
+                    panel.classList.add('hidden');
+                    if (id === 'home' || id === 'game' || id === 'quiz') panel.classList.remove('flex');
+                    // Inactive Button
+                    btn.className = `px-4 py-2 bg-gray-100 text-gray-600 font-semibold rounded-lg shadow hover:bg-gray-200 transition-colors border-2 border-transparent`;
+                }
+            });
+
+            if(tabId === 'game' && document.getElementById('game-board').children.length === 0) initGame();
+            if(tabId === 'quiz' && document.getElementById('quiz-container').children.length === 0) initQuiz();
+        }
+
+        // ==========================================
+        // PART 1: VISUAL FRACTION SANDBOX LOGIC
+        // ==========================================
+        let currentSandboxState = { transformed: false, n1: 1, d1: 2, n2: 1, d2: 3 };
+
+        function drawInitialFractions() {
+            let n1 = parseInt(document.getElementById('num1').value);
+            let d1 = parseInt(document.getElementById('den1').value);
+            let n2 = parseInt(document.getElementById('num2').value);
+            let d2 = parseInt(document.getElementById('den2').value);
+
+            if (n1>d1) { n1 = d1; document.getElementById('num1').value = n1; }
+            if (n2>d2) { n2 = d2; document.getElementById('num2').value = n2; }
+            if (d1 < 1 || d2 < 1) return;
+
+            currentSandboxState = { transformed: false, n1, d1, n2, d2 };
+            
+            document.getElementById('sandbox-feedback').style.opacity = '0';
+            document.getElementById('btn-transform').disabled = false;
+            document.getElementById('btn-transform').classList.remove('opacity-50', 'cursor-not-allowed');
+
+            buildFractionGrid(document.getElementById('visual1'), n1, d1, 'col', 1);
+            document.getElementById('lbl-frac1').innerHTML = `${n1}/${d1}`;
+
+            buildFractionGrid(document.getElementById('visual2'), n2, d2, 'row', 2);
+            document.getElementById('lbl-frac2').innerHTML = `${n2}/${d2}`;
+        }
+
+        function buildFractionGrid(container, num, den, splitDirection, colorIndex) {
+            container.innerHTML = '';
+            if (splitDirection === 'col') {
+                container.style.gridTemplateColumns = `repeat(${den}, 1fr)`;
+                container.style.gridTemplateRows = `1fr`;
+            } else {
+                container.style.gridTemplateColumns = `1fr`;
+                container.style.gridTemplateRows = `repeat(${den}, 1fr)`;
+            }
+
+            for (let i = 0; i < den; i++) {
+                let piece = document.createElement('div');
+                piece.className = 'fraction-piece';
+                if (i < num) piece.classList.add(`filled-${colorIndex}`);
+                container.appendChild(piece);
+            }
+        }
+
+        function transformFractions() {
+            if (currentSandboxState.transformed) return;
+
+            const { n1, d1, n2, d2 } = currentSandboxState;
+            
+            if (d1 === d2) {
+                showToast("ตัวส่วนเท่ากันอยู่แล้ว สามารถนำตัวเศษบวกกันได้เลย", true);
+                return;
+            }
+
+            const commonDen = d1 * d2; 
+            const v1 = document.getElementById('visual1');
+            const v2 = document.getElementById('visual2');
+
+            v1.style.gridTemplateRows = `repeat(${d2}, 1fr)`;
+            v2.style.gridTemplateColumns = `repeat(${d1}, 1fr)`;
+            
+            v1.innerHTML = '';
+            for(let r=0; r<d2; r++) {
+                for(let c=0; c<d1; c++) {
+                    let piece = document.createElement('div');
+                    piece.className = 'fraction-piece transformed';
+                    if (c < n1) piece.classList.add('filled-1');
+                    v1.appendChild(piece);
+                }
+            }
+
+            v2.innerHTML = '';
+            for(let r=0; r<d2; r++) {
+                for(let c=0; c<d1; c++) {
+                    let piece = document.createElement('div');
+                    piece.className = 'fraction-piece transformed';
+                    if (r < n2) piece.classList.add('filled-2');
+                    v2.appendChild(piece);
+                }
+            }
+
+            document.getElementById('btn-transform').classList.add('opacity-50', 'cursor-not-allowed');
+            document.getElementById('btn-transform').disabled = true;
+            currentSandboxState.transformed = true;
+
+            const newN1 = n1 * d2;
+            const newN2 = n2 * d1;
+
+            const lbl1 = document.getElementById('lbl-frac1');
+            const lbl2 = document.getElementById('lbl-frac2');
+            lbl1.innerHTML = `<span class="line-through text-slate-400 text-lg">${n1}/${d1}</span> <span class="text-blue-700 ml-1">${newN1}/${commonDen}</span>`;
+            lbl2.innerHTML = `<span class="line-through text-slate-400 text-lg">${n2}/${d2}</span> <span class="text-emerald-700 ml-1">${newN2}/${commonDen}</span>`;
+            
+            lbl1.classList.add('bounce');
+            lbl2.classList.add('bounce');
+            setTimeout(() => { lbl1.classList.remove('bounce'); lbl2.classList.remove('bounce'); }, 500);
+
+            const feedback = document.getElementById('sandbox-feedback');
+            feedback.innerHTML = `ตัวส่วนถูกปรับให้เท่ากันแล้วที่ <span class="text-blue-700 font-bold text-2xl px-2">${commonDen}</span> โดยหลักการซอยพื้นที่ให้เล็กลง`;
+            feedback.style.opacity = '1';
+
+            confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+        }
+
+        // ==========================================
+        // PART 2: MATCHING GAME LOGIC
+        // ==========================================
+        const problems = [
+            { id: 1, orig: "1/2 + 1/4", eq: "2/4 + 1/4", numAns: 3, denAns: 4 },
+            { id: 2, orig: "1/3 + 1/6", eq: "2/6 + 1/6", numAns: 3, denAns: 6 }, 
+            { id: 3, orig: "1/2 + 1/6", eq: "3/6 + 1/6", numAns: 4, denAns: 6 },
+            { id: 4, orig: "2/3 + 1/6", eq: "4/6 + 1/6", numAns: 5, denAns: 6 },
+            { id: 5, orig: "1/2 + 1/3", eq: "3/6 + 2/6", numAns: 5, denAns: 6 },
+            { id: 6, orig: "1/4 + 1/3", eq: "3/12 + 4/12", numAns: 7, denAns: 12 },
+            { id: 7, orig: "1/5 + 1/10", eq: "2/10 + 1/10", numAns: 3, denAns: 10 },
+            { id: 8, orig: "1/2 + 1/8", eq: "4/8 + 1/8", numAns: 5, denAns: 8 },
+            { id: 9, orig: "3/4 + 1/8", eq: "6/8 + 1/8", numAns: 7, denAns: 8 },
+            { id: 10, orig: "1/3 + 1/9", eq: "3/9 + 1/9", numAns: 4, denAns: 9 },
+        ];
+
+        let cards = [], flippedCards = [], matchedPairs = 0, totalPairs = 10, lockBoard = false, currentProblemContext = null;
+
+        function initGame() {
+            const board = document.getElementById('game-board');
+            board.innerHTML = '';
+            cards = []; flippedCards = []; matchedPairs = 0; lockBoard = false;
+            document.getElementById('score').innerText = '0';
+            
+            const difficulty = document.getElementById('difficulty').value;
+            totalPairs = (difficulty === 'easy') ? 4 : (difficulty === 'medium' ? 7 : 10);
+            document.getElementById('total-score').innerText = totalPairs;
+
+            let selectedProblems = [...problems].sort(() => 0.5 - Math.random()).slice(0, totalPairs);
+
+            selectedProblems.forEach(prob => {
+                cards.push({ id: prob.id, type: 'orig', text: prob.orig, probData: prob });
+                cards.push({ id: prob.id, type: 'eq', text: prob.eq, probData: prob });
+            });
+
+            cards.sort(() => 0.5 - Math.random());
+
+            cards.forEach((cardData, index) => {
+                const cardEl = document.createElement('div');
+                cardEl.classList.add('perspective', 'w-full', 'aspect-[3/4]', 'cursor-pointer');
+                cardEl.dataset.index = index;
+                
+                const bgFront = "bg-white border border-slate-300 text-slate-700 shadow hover:shadow-md transition-shadow";
+                const bgBack = "bg-slate-800 border border-slate-700 shadow flex justify-center items-center text-3xl text-slate-400 hover:bg-slate-700 transition-colors";
+                const formattedText = formatFractionText(cardData.text, cardData.type);
+
+                cardEl.innerHTML = `
+                    <div class="flip-card-inner">
+                        <div class="flip-card-front ${bgBack}">
+                            <i class="fa-solid fa-shapes opacity-30"></i>
+                        </div>
+                        <div class="flip-card-back ${bgFront} flex flex-col items-center justify-center p-2 text-center">
+                            <div class="text-[0.65rem] md:text-xs text-slate-500 mb-2 font-medium bg-slate-100 rounded px-2 py-0.5 border border-slate-200">
+                                ${cardData.type === 'orig' ? 'โจทย์เริ่มต้น' : 'ปรับส่วนแล้ว'}
+                            </div>
+                            <div class="font-bold">
+                                ${formattedText}
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                cardEl.addEventListener('click', () => flipCard(cardEl, cardData));
+                board.appendChild(cardEl);
+            });
+        }
+
+        function formatFractionText(text, type) {
+            const parts = text.split(' + ');
+            const f1 = parts[0].split('/');
+            const f2 = parts[1].split('/');
+            const colorClass = type === 'orig' ? 'text-blue-700' : 'text-emerald-700';
+
+            return `
+                <div class="flex items-center justify-center gap-2 text-base md:text-xl">
+                    <div class="flex flex-col items-center">
+                        <span class="${colorClass}">${f1[0]}</span>
+                        <hr class="w-full border-slate-400 my-[2px]">
+                        <span class="text-slate-700">${f1[1]}</span>
+                    </div>
+                    <span class="text-slate-400 font-bold mx-1">+</span>
+                    <div class="flex flex-col items-center">
+                        <span class="${colorClass}">${f2[0]}</span>
+                        <hr class="w-full border-slate-400 my-[2px]">
+                        <span class="text-slate-700">${f2[1]}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function flipCard(cardEl, cardData) {
+            if (lockBoard) return;
+            if (cardEl.classList.contains('flipped')) return;
+
+            cardEl.classList.add('flip-card', 'flipped');
+            flippedCards.push({ el: cardEl, data: cardData });
+
+            if (flippedCards.length === 2) checkMatch();
+        }
+
+        function checkMatch() {
+            lockBoard = true;
+            const [card1, card2] = flippedCards;
+            
+            if (card1.data.id === card2.data.id && card1.data.type !== card2.data.type) {
+                setTimeout(() => { openAnswerModal(card1.data.probData); }, 700); 
+            } else {
+                setTimeout(() => {
+                    card1.el.classList.remove('flipped');
+                    card2.el.classList.remove('flipped');
+                    flippedCards = [];
+                    lockBoard = false;
+                }, 1000);
+            }
+        }
+
+        function openAnswerModal(problemData) {
+            currentProblemContext = problemData;
+            document.getElementById('ans-num').value = '';
+            document.getElementById('ans-den').value = '';
+            document.getElementById('modal-feedback').classList.add('hidden');
+            
+            // เปลี่ยนรูปแบบโจทย์ให้อ่านง่าย
+            const eqParts = problemData.eq.split(' + ');
+            document.getElementById('modal-problem').innerHTML = `${eqParts[0]} <span class="text-slate-400 mx-1">+</span> ${eqParts[1]}`;
+            
+            const modal = document.getElementById('answer-modal');
+            modal.classList.remove('hidden');
+            setTimeout(() => { document.getElementById('modal-content').classList.replace('scale-95', 'scale-100'); }, 10);
+        }
+
+        function closeModal(isSuccess) {
+            const modal = document.getElementById('answer-modal');
+            document.getElementById('modal-content').classList.replace('scale-100', 'scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                if (!isSuccess) {
+                    flippedCards[0].el.classList.remove('flipped');
+                    flippedCards[1].el.classList.remove('flipped');
+                } else {
+                    flippedCards[0].el.style.opacity = '0';
+                    flippedCards[0].el.style.cursor = 'default';
+                    flippedCards[1].el.style.opacity = '0';
+                    flippedCards[1].el.style.cursor = 'default';
+                    
+                    matchedPairs++;
+                    document.getElementById('score').innerText = matchedPairs;
+                    
+                    if (matchedPairs === totalPairs) {
+                        setTimeout(() => {
+                            showToast("ยอดเยี่ยม! การทำแบบฝึกหัดเสร็จสมบูรณ์", true);
+                            confetti({ particleCount: 150, spread: 100 });
+                        }, 500);
+                    }
+                }
+                flippedCards = [];
+                lockBoard = false;
+            }, 200);
+        }
+
+        function checkAnswer() {
+            const numInput = parseInt(document.getElementById('ans-num').value);
+            const denInput = parseInt(document.getElementById('ans-den').value);
+            const feedback = document.getElementById('modal-feedback');
+
+            if (!numInput || !denInput) {
+                feedback.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> กรุณากรอกตัวเลขให้ครบถ้วนทั้งตัวเศษและตัวส่วน';
+                feedback.classList.remove('hidden');
+                return;
+            }
+
+            if (numInput === currentProblemContext.numAns && denInput === currentProblemContext.denAns) {
+                feedback.classList.add('hidden');
+                confetti({ particleCount: 60, spread: 60, origin: { y: 0.5 } });
+                showToast("ถูกต้อง! การคำนวณสมบูรณ์", true);
+                closeModal(true);
+            } else if (denInput !== currentProblemContext.denAns) {
+                feedback.innerHTML = '<i class="fa-solid fa-lightbulb"></i> ข้อควรระวัง: ตัวส่วนต้องคงเดิม (ไม่นำมาบวกกัน) เมื่อปรับส่วนให้เท่ากันแล้ว';
+                feedback.classList.remove('hidden');
+            } else {
+                feedback.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> คำตอบยังไม่ถูกต้อง กรุณาตรวจสอบผลบวกของตัวเศษอีกครั้ง';
+                feedback.classList.remove('hidden');
+            }
+        }
+
+        // ==========================================
+        // PART 3: QUIZ LOGIC
+        // ==========================================
+        const quizQuestions = [
+            {
+                q: "ทำไมเราจึงต้อง 'ปรับตัวส่วนให้เท่ากัน' ก่อนทำการบวกเศษส่วน?",
+                options: [
+                    "ก. เพื่อให้ตัวเลขดูสวยงามและเป็นระเบียบ",
+                    "ข. เพื่อให้ชิ้นส่วนของเศษส่วนมีขนาดเท่ากัน จึงจะสามารถนำมารวมกันได้อย่างถูกต้อง",
+                    "ค. เป็นกฎทางคณิตศาสตร์ที่ตั้งขึ้นโดยไม่มีเหตุผล",
+                    "ง. เพื่อให้ตัวเศษมีค่ามากขึ้นและบวกได้ง่ายขึ้น"
+                ],
+                ans: 1 // index 1 is ข
+            },
+            {
+                q: "ความหมายของการเปลี่ยนเศษ 1/2 ให้เป็น 2/4 จากการวาดรูปคือข้อใด?",
+                options: [
+                    "ก. ปริมาณของพื้นที่เพิ่มขึ้นเป็น 2 เท่า",
+                    "ข. ปริมาณของพื้นที่ลดลงเหลือครึ่งหนึ่ง",
+                    "ค. ปริมาณพื้นที่เท่าเดิม แต่ถูกซอยแบ่งให้เป็นชิ้นที่เล็กลงและมีจำนวนชิ้นมากขึ้น",
+                    "ง. รูปร่างของพื้นที่เปลี่ยนไปจากสี่เหลี่ยมเป็นวงกลม"
+                ],
+                ans: 2 
+            },
+            {
+                q: "ผลลัพธ์ของการบวก 1/4 + 1/2 มีค่าเท่ากับข้อใด?",
+                options: [
+                    "ก. 2/6",
+                    "ข. 3/4",
+                    "ค. 2/4",
+                    "ง. 3/6"
+                ],
+                ans: 1
+            },
+            {
+                q: "หากต้องการหาผลบวกของ 1/3 กับ 1/4 ควรปรับตัวส่วนให้เป็นเลขใดจึงจะเหมาะสมที่สุด?",
+                options: [
+                    "ก. 7",
+                    "ข. 10",
+                    "ค. 12",
+                    "ง. 24"
+                ],
+                ans: 2
+            },
+            {
+                q: "เด็กชายเอ คำนวณ 1/2 + 1/3 แล้วได้คำตอบเป็น 2/5 เด็กชายเอทำผิดพลาดในจุดใด?",
+                options: [
+                    "ก. นำตัวเศษบวกตัวเศษ และตัวส่วนบวกตัวส่วน โดยที่ตัวส่วนยังไม่เท่ากัน",
+                    "ข. ทำการคูณเลขผิดในขั้นตอนการหาคำตอบ",
+                    "ค. ลืมทำเศษส่วนให้เป็นเศษส่วนอย่างต่ำ",
+                    "ง. เลือกใช้ตัวส่วนร่วมผิดพลาด"
+                ],
+                ans: 0
+            }
+        ];
+
+        let userAnswers = new Array(quizQuestions.length).fill(null);
+        let quizSubmitted = false;
+
+        function initQuiz() {
+            const container = document.getElementById('quiz-container');
+            container.innerHTML = '';
+            userAnswers = new Array(quizQuestions.length).fill(null);
+            quizSubmitted = false;
+
+            document.getElementById('btn-submit-quiz').classList.remove('hidden');
+            document.getElementById('btn-retry-quiz').classList.add('hidden');
+            const resultDiv = document.getElementById('quiz-result');
+            resultDiv.classList.add('hidden');
+            resultDiv.innerHTML = '';
+
+            quizQuestions.forEach((qData, qIndex) => {
+                const qBlock = document.createElement('div');
+                qBlock.className = 'bg-slate-50 p-5 rounded-lg border border-slate-200';
+                
+                let optionsHtml = '';
+                qData.options.forEach((opt, oIndex) => {
+                    optionsHtml += `
+                        <div class="quiz-option p-3 mb-2 border border-slate-300 rounded cursor-pointer hover:bg-slate-100 flex items-center gap-3" 
+                             onclick="selectQuizOption(${qIndex}, ${oIndex})" id="opt-${qIndex}-${oIndex}">
+                            <div class="w-5 h-5 rounded-full border border-slate-400 flex-shrink-0 flex items-center justify-center indicator"></div>
+                            <span class="text-slate-700">${opt}</span>
+                        </div>
+                    `;
+                });
+
+                qBlock.innerHTML = `
+                    <h3 class="text-lg font-bold text-slate-800 mb-4">${qIndex + 1}. ${qData.q}</h3>
+                    <div class="options-group" id="qgroup-${qIndex}">
+                        ${optionsHtml}
+                    </div>
+                    <div id="q-feedback-${qIndex}" class="mt-3 text-sm font-semibold hidden"></div>
+                `;
+                container.appendChild(qBlock);
+            });
+        }
+
+        function selectQuizOption(qIndex, oIndex) {
+            if (quizSubmitted) return;
+
+            userAnswers[qIndex] = oIndex;
+            
+            // ล้างสไตล์เก่า
+            for(let i=0; i<4; i++){
+                const optEl = document.getElementById(`opt-${qIndex}-${i}`);
+                optEl.classList.remove('selected', 'border-blue-600', 'bg-blue-50');
+                const ind = optEl.querySelector('.indicator');
+                ind.classList.remove('bg-blue-600', 'border-blue-600');
+                ind.innerHTML = '';
+            }
+
+            // ตั้งค่าสไตล์ตัวที่เลือก
+            const selectedOpt = document.getElementById(`opt-${qIndex}-${oIndex}`);
+            selectedOpt.classList.add('selected');
+            const ind = selectedOpt.querySelector('.indicator');
+            ind.classList.add('bg-blue-600', 'border-blue-600');
+            ind.innerHTML = '<div class="w-2 h-2 bg-white rounded-full"></div>';
+        }
+
+        function submitQuiz() {
+            if (userAnswers.includes(null)) {
+                showToast("กรุณาตอบคำถามให้ครบทุกข้อก่อนส่งคำตอบ", false);
+                return;
+            }
+
+            quizSubmitted = true;
+            let score = 0;
+
+            quizQuestions.forEach((qData, qIndex) => {
+                const userAns = userAnswers[qIndex];
+                const correctAns = qData.ans;
+                const feedbackEl = document.getElementById(`q-feedback-${qIndex}`);
+
+                // ทำให้ตัวเลือกคลิกไม่ได้
+                for(let i=0; i<4; i++){
+                    document.getElementById(`opt-${qIndex}-${i}`).classList.remove('cursor-pointer', 'hover:bg-slate-100');
+                }
+
+                if (userAns === correctAns) {
+                    score++;
+                    const optEl = document.getElementById(`opt-${qIndex}-${userAns}`);
+                    optEl.classList.add('correct');
+                    feedbackEl.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600"></i> ถูกต้อง';
+                    feedbackEl.classList.add('text-emerald-700');
+                } else {
+                    const wrongOptEl = document.getElementById(`opt-${qIndex}-${userAns}`);
+                    wrongOptEl.classList.add('incorrect');
+                    
+                    const rightOptEl = document.getElementById(`opt-${qIndex}-${correctAns}`);
+                    rightOptEl.classList.add('correct');
+
+                    feedbackEl.innerHTML = '<i class="fa-solid fa-circle-xmark text-red-600"></i> ไม่ถูกต้อง';
+                    feedbackEl.classList.add('text-red-700');
+                }
+                feedbackEl.classList.remove('hidden');
+            });
+
+            document.getElementById('btn-submit-quiz').classList.add('hidden');
+            document.getElementById('btn-retry-quiz').classList.remove('hidden');
+
+            const resultDiv = document.getElementById('quiz-result');
+            resultDiv.classList.remove('hidden');
+            
+            if(score >= 4) {
+                resultDiv.className = "mt-6 text-2xl font-bold p-4 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-300";
+                resultDiv.innerHTML = `ยอดเยี่ยมมาก! คุณได้คะแนน ${score} / 5 <i class="fa-solid fa-star text-yellow-500"></i>`;
+                confetti({ particleCount: 200, spread: 120 });
+            } else {
+                resultDiv.className = "mt-6 text-2xl font-bold p-4 rounded-lg bg-blue-100 text-blue-800 border border-blue-300";
+                resultDiv.innerHTML = `คุณได้คะแนน ${score} / 5 <br><span class="text-lg font-medium">ลองทบทวนแบบจำลองสถานการณ์แล้วมาทำใหม่นะ!</span>`;
+            }
+            
+            window.scrollTo({ top: resultDiv.offsetTop, behavior: 'smooth' });
+        }
+
+        // ==========================================
+        // Initialization
+        // ==========================================
+        window.onload = function() {
+            drawInitialFractions(); 
+            switchTab('home');      
+        }
+
+    </script>
+</body>
+</html>
